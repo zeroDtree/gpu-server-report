@@ -1,0 +1,27 @@
+---
+description: Require English for generated code content
+alwaysApply: true
+---
+
+# English Code Generation
+
+## Scope
+- Write all generated source code, identifiers, comments, docstrings, commit messages, and user-facing developer text in English.
+
+## Requirements
+- Prefer clear, simple English wording over idioms or slang.
+- Keep naming consistent and meaningful in English.
+- If non-English input is provided, preserve semantic intent but generate code output in English.
+
+## Examples
+```python
+# ❌ BAD
+def jisuan_zonghe(chengji):
+    # 计算平均分
+    return sum(chengji) / len(chengji)
+
+# ✅ GOOD
+def calculate_average(scores):
+    # Calculate the average score.
+    return sum(scores) / len(scores)
+```

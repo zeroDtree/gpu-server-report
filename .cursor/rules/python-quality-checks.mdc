@@ -1,0 +1,26 @@
+---
+description: Run ruff and ty checks for Python changes
+alwaysApply: true
+---
+
+# Python Quality Checks
+
+Before finalizing Python code changes, run both checks:
+
+- `uv run ruff check`
+- `uv run ty check`
+
+Treat check failures as blockers:
+
+- Fix all reported issues before considering the task complete.
+- Re-run both commands after fixes to confirm a clean result.
+
+```bash
+# ✅ GOOD
+uv run ruff check
+uv run ty check
+
+# ❌ BAD
+ruff check
+ty check
+```

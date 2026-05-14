@@ -1,0 +1,15 @@
+[project]
+name = "gpu-server-report"
+version = "0.1.0"
+description = "GPU metrics reporter"
+requires-python = ">=3.11"
+dependencies = [
+    "requests>=2.31",
+    "python-dotenv>=1.0",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.12",
+    "ty>=0.0.35",
+]
