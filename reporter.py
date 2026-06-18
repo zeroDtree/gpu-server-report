@@ -20,6 +20,8 @@ from urllib.parse import urlparse
 import requests
 from dotenv import load_dotenv
 
+from health_server import HealthState, load_health_bind, start_health_server
+
 ENV_AGENT_HTTP_HOST = "AGENT_HTTP_HOST"
 ENV_AGENT_HTTP_PORT = "AGENT_HTTP_PORT"
 DEFAULT_AGENT_HTTP_HOST = "0.0.0.0"
@@ -124,8 +126,12 @@ def load_config() -> dict:
         )
         http_port = DEFAULT_AGENT_HTTP_PORT
 
+    report_api = os.getenv("REPORT_API_URL", "").strip()
+    gsad_api = os.getenv("GSAD_API_URL", "http://localhost:8080").strip()
+    api_url = (report_api or gsad_api).rstrip("/")
+
     return {
-        "api_url": os.getenv("REPORT_API_URL", "http://localhost:8080").rstrip("/"),
+        "api_url": api_url,
         "psk": os.getenv("AGENT_PSK", ""),
         "hostname": os.getenv("AGENT_HOSTNAME") or socket.gethostname(),
         "resource_level": resource_level,
@@ -292,9 +298,6 @@ def _make_metrics_handler(config: dict) -> type[BaseHTTPRequestHandler]:
 
         def do_GET(self) -> None:
             path = urlparse(self.path).path
-            if path == "/health":
-                self._send_json(200, {"ok": True})
-                return
             if path == "/metrics":
                 snapshot = collect_gpu_snapshot()
                 if snapshot is None:
@@ -315,10 +318,7 @@ def start_http_server(config: dict, host: str, port: int) -> None:
     server = ThreadingHTTPServer((host, port), handler)
     thread = threading.Thread(target=server.serve_forever, name="metrics-http", daemon=True)
     thread.start()
-    print(
-        f"HTTP server — http://{host}:{port}/metrics http://{host}:{port}/health",
-        file=sys.stderr,
-    )
+    print(f"HTTP server — http://{host}:{port}/metrics", file=sys.stderr)
 
 
 def main() -> None:
@@ -328,6 +328,13 @@ def main() -> None:
     if args.push and not config["psk"]:
         print("FATAL: AGENT_PSK is required when --push is enabled", file=sys.stderr)
         sys.exit(1)
+
+    health: HealthState | None = None
+    bind = load_health_bind(default_port=9092)
+    if bind is not None:
+        host, port = bind
+        health = HealthState(agent="gpu-server-report", hostname=config["hostname"])
+        start_health_server(health, host, port)
 
     session: requests.Session | None = None
     if args.push:
@@ -368,13 +375,19 @@ def main() -> None:
                     print("No GPU metrics collected", file=sys.stderr)
                 if args.push:
                     print("No GPU metrics collected, skipping this cycle", file=sys.stderr)
+                if health is not None and args.push:
+                    health.record_failure("gpu_metrics_unavailable")
             else:
                 payload = snapshot_to_public_dict(config, snapshot)
                 if args.do_print:
                     print(json.dumps(payload, ensure_ascii=False))
                 if args.push:
                     assert session is not None
-                    report(session, config, payload)
+                    if report(session, config, payload):
+                        if health is not None:
+                            health.record_success()
+                    elif health is not None:
+                        health.record_failure("report request failed")
 
             time.sleep(config["interval"])
     else:

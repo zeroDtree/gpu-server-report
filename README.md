@@ -2,6 +2,8 @@
 
 Small **GPU metrics agent**: aggregates data from `nvidia-smi`, optionally exposes a local JSON HTTP API, and optionally **POST**s the **same JSON document** to an upstream report API on a fixed interval. The document includes **per-GPU** rows and a **summary** (averages).
 
+**Production deployment:** see [server-agent/README.md](../README.md) (`sudo ./deploy/install.sh`, config under `/etc/gsad-agent/`).
+
 - **Python:** 3.11+ ([pyproject.toml](pyproject.toml))
 - **GPU host:** NVIDIA driver and `nvidia-smi` in `PATH` when collecting metrics
 - **Network:** reachability to the upstream API when using `--push`; scrapers need access to the bind address when using `--serve`
@@ -23,13 +25,15 @@ Environment variables are loaded from `.env` (see [.env.example](.env.example)).
 
 | Variable                | Role                                                                                                                                                                                                                                                   |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `REPORT_API_URL`        | Upstream report API base URL (default `http://localhost:8080`; trailing slash stripped).                                                                                                                                                               |
+| `REPORT_API_URL`        | Upstream report API base URL (falls back to `GSAD_API_URL` when unset).                                                                                                                                                                                |
 | `AGENT_PSK`             | Pre-shared key; **required when `--push` is enabled** (sent as `X-Agent-PSK`).                                                                                                                                                                         |
 | `AGENT_HOSTNAME`        | Reported hostname (default: system hostname).                                                                                                                                                                                                          |
 | `AGENT_RESOURCE_LEVEL`  | Optional. Free-form label sent as `resourceLevel` (for example the GPU product string). If unset or empty, uses the first line of `nvidia-smi --query-gpu=name --format=csv,noheader,nounits` unchanged. If that fails, uses `unknown` with a warning. |
 | `AGENT_REPORT_INTERVAL` | Seconds between collection ticks when `--print` and/or `--push` (default `30`, minimum `5`).                                                                                                                                                           |
 | `AGENT_HTTP_HOST`       | Default bind host for `--serve` (default `0.0.0.0`).                                                                                                                                                                                                   |
 | `AGENT_HTTP_PORT`       | Default bind port for `--serve` (default `9090`; invalid or out-of-range values fall back with a warning).                                                                                                                                             |
+| `AGENT_HEALTH_HOST`     | Dedicated health bind address (default `127.0.0.1`; always on in default push mode).                                                                                                                                                                   |
+| `AGENT_HEALTH_PORT`     | Dedicated health port (default `9092`; `0` disables). Separate from `--serve` metrics port.                                                                                                                                                            |
 
 **Multi-GPU nodes:** When `AGENT_RESOURCE_LEVEL` is omitted, only the **first** GPU name from `nvidia-smi` is used. Set the variable explicitly if you need a different label.
 
@@ -115,16 +119,16 @@ Each `GET /metrics` request runs the same `nvidia-smi` query again (fine for deb
 
 | Method / path  | Status | Body                                                                                  |
 | -------------- | ------ | ------------------------------------------------------------------------------------- |
-| `GET /health`  | 200    | `{"ok": true}` — does not query the GPU.                                              |
 | `GET /metrics` | 200    | Unified metrics JSON (see [Unified metrics JSON](#unified-metrics-json)).             |
 | `GET /metrics` | 503    | `{"ok": false, "error": "gpu_metrics_unavailable"}` when collection fails or no GPUs. |
 | Other paths    | 404    | `{"ok": false, "error": "not_found"}`.                                                |
 
-Example (default port `9090`; `-sS` = silent body, but show errors on stderr):
+Production health (default push mode) is on a **separate** localhost port: `http://127.0.0.1:9092/health` (see `AGENT_HEALTH_PORT`).
+
+Example (`--serve`, default port `9090`):
 
 ```bash
 curl -sS http://127.0.0.1:9090/metrics
-curl -sS http://127.0.0.1:9090/health
 ```
 
 ## Upstream report (`--push`)
