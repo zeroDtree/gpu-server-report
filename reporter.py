@@ -6,7 +6,6 @@ import argparse
 import csv
 import json
 import os
-import socket
 import subprocess
 import sys
 import threading
@@ -126,14 +125,18 @@ def load_config() -> dict:
         )
         http_port = DEFAULT_AGENT_HTTP_PORT
 
-    report_api = os.getenv("REPORT_API_URL", "").strip()
-    gsad_api = os.getenv("GSAD_API_URL", "http://localhost:8080").strip()
-    api_url = (report_api or gsad_api).rstrip("/")
+    agent_psk = os.getenv("AGENT_PSK", "").strip()
+    server_id = os.getenv("AGENT_SERVER_ID", "").strip()
+    if not server_id:
+        msg = "AGENT_SERVER_ID is required"
+        raise ValueError(msg)
+
+    api_url = os.getenv("REPORT_API_URL", "http://localhost:8080").strip().rstrip("/")
 
     return {
         "api_url": api_url,
-        "psk": os.getenv("AGENT_PSK", ""),
-        "hostname": os.getenv("AGENT_HOSTNAME") or socket.gethostname(),
+        "psk": agent_psk,
+        "server_id": server_id,
         "resource_level": resource_level,
         "interval": interval,
         "http_host": http_host,
@@ -203,7 +206,7 @@ def snapshot_to_public_dict(config: dict, snapshot: GpuMetricsSnapshot) -> dict[
     total_util = sum(g.avg_util for g in snapshot.gpus)
     total_mem = sum(g.mem_used_mb for g in snapshot.gpus)
     return {
-        "hostname": config["hostname"],
+        "serverId": config["server_id"],
         "resourceLevel": config["resource_level"],
         "collectedAt": datetime.now(UTC).isoformat(),
         "gpus": [
@@ -322,7 +325,12 @@ def start_http_server(config: dict, host: str, port: int) -> None:
 
 
 def main() -> None:
-    config = load_config()
+    try:
+        config = load_config()
+    except ValueError as exc:
+        print(f"FATAL: {exc}", file=sys.stderr)
+        sys.exit(1)
+
     args = parse_args(config=config)
 
     if args.push and not config["psk"]:
@@ -333,7 +341,7 @@ def main() -> None:
     bind = load_health_bind(default_port=9092)
     if bind is not None:
         host, port = bind
-        health = HealthState(agent="gpu-server-report", hostname=config["hostname"])
+        health = HealthState(agent="gpu-server-report", server_id=config["server_id"])
         start_health_server(health, host, port)
 
     session: requests.Session | None = None
@@ -356,7 +364,7 @@ def main() -> None:
     startup_parts = [
         "GPU metrics agent starting",
         f"modes={modes}",
-        f"hostname={config['hostname']}",
+        f"server_id={config['server_id']}",
         f"level={config['resource_level']}",
     ]
     if args.do_print or args.push:
