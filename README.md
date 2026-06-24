@@ -17,7 +17,7 @@ Required for `--push`: `AGENT_SERVER_ID`, `AGENT_PSK`. Copy `.env.example` to `.
 |----------|------|
 | `REPORT_API_URL` | Report base URL (default `http://localhost:8080`) |
 | `AGENT_SERVER_ID` | Sent as `serverId` |
-| `AGENT_PSK` | Derived `X-Agent-PSK` header (see root `derive-agent-psk.sh`) |
+| `AGENT_PSK` | `X-Agent-PSK` header value (must match server) |
 | `AGENT_RESOURCE_LEVEL` | Optional `resourceLevel` |
 | `AGENT_REPORT_INTERVAL` | Seconds (default `30`, min `5`) |
 | `AGENT_HTTP_HOST` / `AGENT_HTTP_PORT` | `--serve` bind (default `0.0.0.0:9090`) |
