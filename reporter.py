@@ -233,7 +233,10 @@ def report(session: requests.Session, config: dict, payload: dict[str, Any]) -> 
         resp = session.post(
             url,
             json=payload,
-            headers={"X-Agent-PSK": config["psk"]},
+            headers={
+                "X-Agent-PSK": config["psk"],
+                "X-Agent-Server-Id": config["server_id"],
+            },
             timeout=15,
         )
         resp.raise_for_status()
